@@ -300,13 +300,21 @@ function renderTasks() {
         
         const remainingPomos = tasks.reduce((sum, t) => sum + (t.estimated - t.completed), 0);
         if (remainingPomos > 0) {
-          const now = new Date();
-          const minutesToAdd = remainingPomos * 25 + Math.floor(remainingPomos / 4) * 15;
-          now.setMinutes(now.getMinutes() + minutesToAdd);
-          const finishStr = now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+            const now = new Date();
+	    let pomos = remainingPomos;
+	    let toMulBy5 = pomos-Math.floor(pomos/4);
+	    if(Math.floor(pomos%4) > 0){
+		toMulBy5 = toMulBy5-1;
+	    }
+	    let toMulBy15 = pomos - toMulBy5  - 1;
+	    //console.log(now);
+	    //console.log(pomos);
+            const minutesToAdd = remainingPomos * 25 + toMulBy15 * 15 + toMulBy5 * 5; // counting the breaks with /4
+            now.setMinutes(now.getMinutes() + minutesToAdd);
+            const finishStr = now.toLocaleTimeString('en-US', {timeZone:"Asia/Famagusta",hour: '2-digit', minute: '2-digit'});
           document.getElementById('finish-time').textContent = finishStr;
         } else {
-          document.getElementById('finish-time').textContent = 'Done!';
+          document.getElementById('finish-time').textContent = 'NA | No active tasks.';
         }
       }
 
