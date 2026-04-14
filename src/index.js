@@ -14,6 +14,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const tasks = [];
 
+      // ==================== NOTIFICATION SYSTEM ====================
+      function showNotification(message, type = 'info', duration = 3000) {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.classList.add('hide');
+          setTimeout(() => notification.remove(), 300);
+        }, duration);
+      }
+
+      // ==================== AUDIO NOTIFICATION ====================
+      function playNotificationSound() {
+        // Create simple beep sound using Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+      }
+
+      // ==================== DISPLAY & UI ====================
       function updateDisplay() {
         const minutes = Math.floor(timeLeft / 60);
         const seconds = timeLeft % 60;
@@ -37,17 +71,24 @@ document.addEventListener('DOMContentLoaded', () => {
           btn.classList.toggle('active', i === mode);
         });
         
-        document.getElementById('start-btn').textContent = 'Start';
+        const startBtn = document.getElementById('start-btn');
+        startBtn.innerHTML = '<i class="fas fa-play"></i>Start';
+        startBtn.textContent = 'Start';
         updateDisplay();
       };
 
       window.toggleTimer = function() {
+        // ISSUE #3 FIX: Don't trigger if focus is on input field
+        if (document.activeElement.tagName === 'INPUT') {
+          return;
+        }
+
         const startBtn = document.getElementById('start-btn');
         
         if (isRunning) {
           clearInterval(timerInterval);
           isRunning = false;
-          startBtn.textContent = 'Start';
+          startBtn.innerHTML = '<i class="fas fa-play"></i>Start';
         } else {
           timerInterval = setInterval(() => {
             timeLeft--;
@@ -60,11 +101,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }, 1000);
           isRunning = true;
-          startBtn.textContent = 'Pause';
+          startBtn.innerHTML = '<i class="fas fa-pause"></i>Pause';
         }
       };
 
       function handleTimerEnd() {
+        // ISSUE #9 FIX: Play notification sound
+        playNotificationSound();
+
         if (currentMode === 0) { // Finished pomodoro
           totalPomosDone++;
           cycleCount++;
@@ -73,33 +117,45 @@ document.addEventListener('DOMContentLoaded', () => {
           // Auto switch to break
           if (cycleCount % 4 === 0) {
             setMode(2); // Long break
+            showNotification('🎉 Pomodoro complete! Time for a long break.', 'success');
           } else {
             setMode(1); // Short break
+            showNotification('🎉 Pomodoro complete! Time for a short break.', 'success');
           }
         } else {
           // Finished break → back to pomodoro
           setMode(0);
+          showNotification('Break complete! Ready for another pomodoro? ⏱️', 'info');
         }
         
-        // Simple notification + auto-start next session
-        const message = `${modes[currentMode].name} complete!`;
-        alert(message);
-        toggleTimer(); // Auto-start next
+        // Auto-start next session
+        toggleTimer();
       }
 
       window.resetTimer = function() {
         if (timerInterval) clearInterval(timerInterval);
         isRunning = false;
-        timeLeft = modes[currentMode].time;
-        document.getElementById('start-btn').textContent = 'Start';
-        updateDisplay();
+        // ISSUE #2 FIX: Reset should switch to pomodoro mode
+        if (currentMode !== 0) {
+          setMode(0);
+        } else {
+          timeLeft = modes[currentMode].time;
+          const startBtn = document.getElementById('start-btn');
+          startBtn.innerHTML = '<i class="fas fa-play"></i>Start';
+          updateDisplay();
+        }
       };
 
+      // ==================== TASK MANAGEMENT ====================
       window.addTask = function() {
-        const name = document.getElementById('task-name').value.trim();
+        const nameInput = document.getElementById('task-name');
+        const name = nameInput.value.trim();
         const estimated = parseInt(document.getElementById('task-pomos').value) || 1;
         
-        if (!name) return;
+        if (!name) {
+          showNotification('Please enter a task name', 'info');
+          return;
+        }
         
         tasks.push({
           name,
@@ -108,9 +164,10 @@ document.addEventListener('DOMContentLoaded', () => {
           done: false
         });
         
-        document.getElementById('task-name').value = '';
+        nameInput.value = '';
         renderTasks();
         updateStats();
+        showNotification(`✓ Task "${name}" added!`, 'success');
       };
 
       function renderTasks() {
@@ -121,14 +178,21 @@ document.addEventListener('DOMContentLoaded', () => {
           const li = document.createElement('li');
           li.className = `task-item ${task.done ? 'completed' : ''}`;
           li.innerHTML = `
-            <div>
+            <div class="task-item-content">
               <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleTaskDone(${index})">
               <span>${task.name}</span>
               <small> (${task.completed}/${task.estimated})</small>
             </div>
-            <div>
-              <button onclick="incrementPomo(${index})">+</button>
-              <button onclick="deleteTask(${index})">×</button>
+            <div class="task-item-actions">
+              <button onclick="decrementPomo(${index})" title="Decrease pomodoros">
+                <i class="fas fa-minus"></i>
+              </button>
+              <button onclick="incrementPomo(${index})" title="Increase pomodoros">
+                <i class="fas fa-plus"></i>
+              </button>
+              <button onclick="deleteTask(${index})" title="Delete task">
+                <i class="fas fa-trash"></i>
+              </button>
             </div>
           `;
           list.appendChild(li);
@@ -139,6 +203,9 @@ document.addEventListener('DOMContentLoaded', () => {
         tasks[index].done = !tasks[index].done;
         renderTasks();
         updateStats();
+        const task = tasks[index];
+        const status = task.done ? 'completed' : 'reopened';
+        showNotification(`Task ${status}`, 'info', 2000);
       };
 
       window.incrementPomo = function(index) {
@@ -146,15 +213,50 @@ document.addEventListener('DOMContentLoaded', () => {
           tasks[index].completed++;
           renderTasks();
           updateStats();
+          showNotification('+1 pomodoro logged', 'success', 2000);
+        }
+      };
+
+      // ISSUE #5 FIX: Add ability to decrease pomodoros
+      window.decrementPomo = function(index) {
+        if (tasks[index].completed > 0) {
+          tasks[index].completed--;
+          renderTasks();
+          updateStats();
+          showNotification('-1 pomodoro', 'info', 2000);
         }
       };
 
       window.deleteTask = function(index) {
+        const taskName = tasks[index].name;
         tasks.splice(index, 1);
         renderTasks();
         updateStats();
+        showNotification(`Task removed`, 'info', 2000);
       };
 
+      // ISSUE #4 FIX: Clear all tasks with confirmation
+      window.showClearConfirmation = function() {
+        if (tasks.length === 0) {
+          showNotification('No tasks to clear', 'info');
+          return;
+        }
+        document.getElementById('confirmModal').classList.add('show');
+      };
+
+      window.cancelClear = function() {
+        document.getElementById('confirmModal').classList.remove('show');
+      };
+
+      window.clearAllTasks = function() {
+        tasks.length = 0;
+        renderTasks();
+        updateStats();
+        document.getElementById('confirmModal').classList.remove('show');
+        showNotification('All tasks cleared', 'info');
+      };
+
+      // ==================== STATISTICS ====================
       function updateStats() {
         document.getElementById('completed-count').textContent = totalPomosDone;
         
@@ -170,9 +272,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Keyboard shortcuts (Space = start/pause, 1/2/3 = modes, R = reset)
+      // ==================== KEYBOARD SHORTCUTS ====================
       document.addEventListener('keydown', (e) => {
-        if (e.key === ' ') {
+        // Don't trigger shortcuts when typing in input
+        if (document.activeElement.tagName === 'INPUT') {
+          // ISSUE #1 FIX: Allow Enter to add task
+          if (e.key === 'Enter' && document.activeElement.id === 'task-name') {
+            addTask();
+            e.preventDefault();
+          }
+          return;
+        }
+
+        // ISSUE #3 FIX: Space bar handling (only when not in input)
+        if (e.key === ' ' || e.code === 'Space') {
           e.preventDefault();
           toggleTimer();
         }
@@ -180,6 +293,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === '2') setMode(1);
         if (e.key === '3') setMode(2);
         if (e.key.toLowerCase() === 'r') resetTimer();
+      });
+
+      // Close modal when clicking outside
+      document.getElementById('confirmModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+          cancelClear();
+        }
       });
 
       // Initialize
