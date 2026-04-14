@@ -3,12 +3,13 @@ document.addEventListener('DOMContentLoaded', () => {
       let timerInterval = null;
       let isRunning = false;
       let currentMode = 0; // 0: pomodoro, 1: short, 2: long
+      let currentTaskIndex = null; 
       let totalPomosDone = 0;
       let cycleCount = 0;
 
       const modes = [
         { name: "Pomodoro", time: 25 * 60, color: "#e74c3c" },
-        { name: "Short Break", time: 5 * 60, color: "#27ae60" },
+        { name: "Short Break", time: 2 * 60, color: "#27ae60" },
         { name: "Long Break", time: 15 * 60, color: "#2980b9" }
       ];
 
@@ -88,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isRunning) {
           clearInterval(timerInterval);
           isRunning = false;
-          startBtn.innerHTML = '<i class="fas fa-play"></i>Start';
+          startBtn.innerHTML = '<i class="fas fa-play"></i>Resume';
         } else {
           timerInterval = setInterval(() => {
             timeLeft--;
@@ -99,6 +100,10 @@ document.addEventListener('DOMContentLoaded', () => {
               isRunning = false;
               handleTimerEnd();
             }
+	    // select undone task if any
+	    // post notification
+	
+	    
           }, 1000);
           isRunning = true;
           startBtn.innerHTML = '<i class="fas fa-pause"></i>Pause';
@@ -106,32 +111,65 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       function handleTimerEnd() {
-        // ISSUE #9 FIX: Play notification sound
-        playNotificationSound();
+	      playNotificationSound();
 
-        if (currentMode === 0) { // Finished pomodoro
-          totalPomosDone++;
-          cycleCount++;
-          updateStats();
-          
-          // Auto switch to break
-          if (cycleCount % 4 === 0) {
-            setMode(2); // Long break
-            showNotification('🎉 Pomodoro complete! Time for a long break.', 'success');
-          } else {
-            setMode(1); // Short break
-            showNotification('🎉 Pomodoro complete! Time for a short break.', 'success');
-          }
-        } else {
-          // Finished break → back to pomodoro
-          setMode(0);
-          showNotification('Break complete! Ready for another pomodoro? ⏱️', 'info');
-        }
-        
-        // Auto-start next session
-        toggleTimer();
+	      if (currentMode === 0) { // Finished a Pomodoro
+		      totalPomosDone++;
+		      cycleCount++;
+
+    // === NEW: Auto-log to active task ===
+    if (currentTaskIndex !== null && !tasks[currentTaskIndex].done) { // there was a selected undone task
+      const task = tasks[currentTaskIndex];
+      if (task.completed < task.estimated) {
+        task.completed++;
+        showNotification(`+1 pomodoro logged to "${task.name}"`, 'success', 2500); // if task got no more pomos, mark it as completed
+        if (task.completed == task.estimated){ // after the addition
+		// wait for previous notification then pop this one
+		task.done =  true;
+		showNotification(`${task.name} completed!`, 'success', 2500);
+		// currentTaskIndex = nextTask if any else current. next timer will check if any tasks are not done and act on that
       }
+      } else { //this should never happen: the current task should always be a task with completed < estimatad
+	task.done = true;
+        showNotification(`"${task.name}" completed!`, 'info', 2000); // this should mark the task as done.
+	      // add means to make it illegal to select a task that is already done
+	      // notification showing task is completed
+	      // notification moving to break (break will move to (all tasks completed) if no next task, else, next task)
+      }
+    } else if (currentTaskIndex === null) {
+      showNotification('Pomodoro completed! Select a task to auto-log next time.', 'info', 3000);
+    }
 
+    updateStats();
+    renderTasks();   // refresh task list to show updated count
+
+    // Auto switch to break
+    if (cycleCount % 4 === 0) {
+      setMode(2);
+      showNotification('4 Pomodoros complete! Long break time.', 'success');
+    } else {
+      setMode(1);
+      showNotification('Pomodoro complete! Short break.', 'success');
+    }
+  } else {
+    // Break finished
+	  // mode needed
+    // find out if there are any active tasks left: if so, switch to next task, activate and start running
+    // else, switch to home page and do nothing
+    setMode(0);
+    showNotification('Break over — back to work!', 'info');
+  }
+
+  // Auto-start next session (as before)
+  toggleTimer();
+}
+
+
+      window.selectTask = function(index) {
+     currentTaskIndex = index;
+     renderTasks();                    // re-render to show active highlight
+     showNotification(`Now working on: ${tasks[index].name}`, 'info', 2000);
+      };
       window.resetTimer = function() {
         if (timerInterval) clearInterval(timerInterval);
         isRunning = false;
@@ -170,34 +208,34 @@ document.addEventListener('DOMContentLoaded', () => {
         showNotification(`✓ Task "${name}" added!`, 'success');
       };
 
-      function renderTasks() {
-        const list = document.getElementById('task-list');
-        list.innerHTML = '';
-        
-        tasks.forEach((task, index) => {
-          const li = document.createElement('li');
-          li.className = `task-item ${task.done ? 'completed' : ''}`;
-          li.innerHTML = `
-            <div class="task-item-content">
-              <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleTaskDone(${index})">
-              <span>${task.name}</span>
-              <small> (${task.completed}/${task.estimated})</small>
-            </div>
-            <div class="task-item-actions">
-              <button onclick="decrementPomo(${index})" title="Decrease pomodoros">
-                <i class="fas fa-minus"></i>
-              </button>
-              <button onclick="incrementPomo(${index})" title="Increase pomodoros">
-                <i class="fas fa-plus"></i>
-              </button>
-              <button onclick="deleteTask(${index})" title="Delete task">
-                <i class="fas fa-trash"></i>
-              </button>
-            </div>
-          `;
-          list.appendChild(li);
-        });
-      }
+     
+
+function renderTasks() {
+  const list = document.getElementById('task-list');
+  list.innerHTML = '';
+
+  tasks.forEach((task, index) => {
+    const li = document.createElement('li');
+    li.className = `task-item ${task.done ? 'completed' : ''} 
+                    ${index === currentTaskIndex ? 'active-task' : ''}`;
+
+    li.innerHTML = `
+      <div class="task-info" onclick="selectTask(${index})">
+        <span class="task-name">${task.name}</span>
+        <span class="task-progress">${task.completed}/${task.estimated}</span>
+      </div>
+      <div class="task-actions">
+        ${index === currentTaskIndex ? '<span class="active-indicator">●</span>' : ''}
+        <button onclick="incrementPomo(${index}); event.stopImmediatePropagation()" title="+1 pomodoro">＋</button>
+        <button onclick="decrementPomo(${index}); event.stopImmediatePropagation()" title="-1 pomodoro">－</button>
+        <button onclick="toggleTaskDone(${index}); event.stopImmediatePropagation()" title="Mark done">✓</button>
+        <button onclick="deleteTask(${index}); event.stopImmediatePropagation()" title="Delete">✕</button>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+}
+
 
       window.toggleTaskDone = function(index) {
         tasks[index].done = !tasks[index].done;
