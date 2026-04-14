@@ -2,6 +2,9 @@
 
 A  minimal Pomodoro timer app for task time expenditure tracking. Inspired by [pomofocus.io](https://pomofocus.io).
 
+## How it looks
+  ![tomadoro ui](./attachments/tomadoro_app.png)
+
 ## Features
 
 - ⏱️ **Pomodoro Timer** - 25-minute focus sessions with configurable breaks
