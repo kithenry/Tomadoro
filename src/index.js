@@ -6,7 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let currentTaskIndex = null; 
       let totalPomosDone = 0;
       let cycleCount = 0;
-
+let activeTask = null;
+let startTime = null;
       const modes = [
         { name: "Pomodoro", time: 25 * 60, color: "#e74c3c" },
         { name: "Short Break", time: 2 * 60, color: "#27ae60" },
@@ -16,6 +17,31 @@ document.addEventListener('DOMContentLoaded', () => {
       const tasks = [];
 
       // ==================== NOTIFICATION SYSTEM ====================
+	function startTimer(taskId) {
+  activeTask = taskId;
+  startTime = Date.now();
+}
+	function switchTask(newTaskId) {
+  if (activeTask !== null) {
+    saveTime(activeTask);
+  }
+
+  activeTask = newTaskId;
+  startTime = Date.now();
+}
+	function saveTime(taskId) {
+  const duration = Date.now() - startTime;
+
+  console.log(`Task ${taskId} time:`, duration);
+
+  // store in DB / state
+}
+	function stopTimer() {
+  if (activeTask !== null) {
+    saveTime(activeTask);
+    activeTask = null;
+  }
+}
       function showNotification(message, type = 'info', duration = 3000) {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
